@@ -14,7 +14,7 @@ pub fn verbose_level_from_abbrv(abbrv:String)-> String{
 pub fn make_object_from_untyped_object(v:&Value)->MongoLog{
     let verbosity = clean_string(v["s"].to_string());
     return MongoLog{
-        attr:serde_json::Value::String(v["attr"].to_string()),
+        attr:v["attr"].clone(),
         c:clean_string(v["c"].to_string()),
         ctx:clean_string(v["ctx"].to_string()),
         id:clean_string(v["id"].to_string()),

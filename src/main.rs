@@ -6,7 +6,7 @@ use types::MongoLog;
 use utils::make_object_from_untyped_object;
 use ui::ui;
 
-use std::{io::{stdin}, collections::HashMap};
+use std::io::{stdin};
 use serde_json::Value;
 use std::io;
 use crossterm::{
@@ -21,10 +21,14 @@ use tui::{
 
 pub struct App {
     pub state: TableState,
+    pub log_view_active: bool,
+    pub details_offset: (u16,u16),
     pub logs:Vec<MongoLog>,
     pub view_items: Vec<Vec<String>>,
-    pub verbose_table:Vec<Vec<String>>,
-    pub verbose_filters:VerboseFilters
+    pub view_logs: Vec<MongoLog>,
+    pub verbose_filters:VerboseFilters,
+    pub selected_log:Option<MongoLog>,
+    pub filtered_msgs:Vec<String>
 }
 pub struct VerboseFilters {
     pub informational:bool,
@@ -32,14 +36,18 @@ pub struct VerboseFilters {
     pub error:bool,
     pub fatal:bool
 }
-impl<'a> App {
+impl App {
     fn new() -> App {
         App {
             state: TableState::default(),
+            log_view_active:true,
+            details_offset:(0,0),
             logs: vec![],
             view_items: vec![],
-            verbose_table: vec![],
-            verbose_filters: VerboseFilters { informational: true, warning: true, error: true, fatal: true }
+            view_logs:vec![],
+            verbose_filters: VerboseFilters { informational: true, warning: true, error: true, fatal: true },
+            selected_log: None,
+            filtered_msgs: vec![]
         }
     }
     fn push(&mut self, row:MongoLog){
@@ -53,55 +61,76 @@ impl<'a> App {
             if self.verbose_filters.error==true {flags.push("Error")}
             if self.verbose_filters.fatal==true {flags.push("Fatal")}
 
-            let filtered_logs:Vec<&MongoLog> = self.logs.iter().filter(|l| flags.iter().any(|f|f==&l.s.as_str())).collect();
-            self.view_items = filtered_logs.iter().enumerate().map(|(id,l)| vec![id.to_string(),l.t.to_string(),l.s.to_string(),l.c.to_string(),l.ctx.to_string(),l.msg.to_string()]).collect();
-        }
+            let filtered_logs:Vec<&MongoLog> = self.logs.iter().filter(|l| 
+                flags.iter().any(|f|f==&l.s.as_str()) == true
+                && 
+                self.filtered_msgs.contains(&l.msg)==false
+            ).collect();
+            self.view_logs = filtered_logs.iter().map(|l| l.clone().to_owned()).collect();
+            self.view_items = filtered_logs.iter().enumerate().map(|(id,l)| 
+                vec![
+                    id.to_string(),
+                    l.t.to_string(),
+                    l.s.to_string(),
+                    l.c.to_string(),
+                    l.ctx.to_string(),
+                    l.msg.to_string()
+                ]
+            ).collect();
+            
+            self.state.select(None);
+            self.selected_log = None;
+            if !self.view_items.is_empty(){
+                self.next();
+            }
+        }   
         else{
             println!("No logs here, friend");
         }
     }
-    pub fn filter_msg(&mut self,msg:&str){
-        let filtered_items:Vec<&MongoLog> = self.logs.iter().filter(|l|l.msg==msg).collect();
-        self.view_items = filtered_items.iter().map(|i| vec![i.t.to_string(),i.s.to_string(),i.c.to_string(),i.msg.to_string()]).collect();
-    }
-    pub fn filter_verbose(&mut self){
-        let mut filtered_items:HashMap<String,Vec<&MongoLog>> = HashMap::new();
-        for log in &self.logs {
-            let key = &log.s;
-            filtered_items.entry(key.to_string()).or_insert(vec![]).push(log);
-        }
-        let mut table_vec:Vec<Vec<String>> = Vec::new();
-        for key in filtered_items.keys() {
-            table_vec.push(vec![key.clone(),filtered_items.get(key).unwrap().len().to_string()])
-        }
-        self.verbose_table = table_vec;
-    }
     pub fn next(&mut self) {
-        let i = match self.state.selected() {
-            Some(i) => {
-                if i >= self.view_items.len() - 1 {
-                    0
-                } else {
-                    i + 1
+        if self.log_view_active{
+            let i = match self.state.selected() {
+                Some(i) => {
+                    if i >= self.view_items.len() - 1 {
+                        0
+                    } else {
+                        i + 1
+                    }
                 }
-            }
-            None => 0,
-        };
-        self.state.select(Some(i));
+                None => 0,
+            };
+            self.state.select(Some(i));
+            self.set_selected_log();
+            self.details_offset = (0,0);
+        }
+        else{
+            self.details_offset.0 +=1;
+        }
     }
 
     pub fn previous(&mut self) {
-        let i = match self.state.selected() {
-            Some(i) => {
-                if i == 0 {
-                    self.view_items.len() - 1
-                } else {
-                    i - 1
+        if self.log_view_active{
+            let i = match self.state.selected() {
+                Some(i) => {
+                    if i == 0 {
+                        self.view_items.len() - 1
+                    } else {
+                        i - 1
+                    }
                 }
+                None => 0,
+            };
+            self.state.select(Some(i));
+            self.set_selected_log();
+            self.details_offset = (0,0);
+        }
+        else{
+            let checked = self.details_offset.0.checked_sub(1);
+            if checked.is_some() {
+                self.details_offset.0 -=1;
             }
-            None => 0,
-        };
-        self.state.select(Some(i));
+        }
     }
     pub fn enter(&mut self){
         let index = self.state.selected();
@@ -112,6 +141,46 @@ impl<'a> App {
     pub fn toggle_verbosity_informational(&mut self){
         self.verbose_filters.informational = !self.verbose_filters.informational;
         self.filter_logs();
+    }
+    pub fn toggle_verbosity_warning(&mut self){
+        self.verbose_filters.warning = !self.verbose_filters.warning;
+        self.filter_logs();
+    }
+    pub fn toggle_verbosity_error(&mut self){
+        self.verbose_filters.error = !self.verbose_filters.error;
+        self.filter_logs();
+    }
+    pub fn toggle_verbosity_fatal(&mut self){
+        self.verbose_filters.fatal = !self.verbose_filters.fatal;
+        self.filter_logs();
+    }
+    pub fn set_selected_log(&mut self){
+        let index = self.state.selected();
+        if index.is_none(){
+            self.selected_log = None
+        }
+        else{
+            let log = &self.view_logs[index.unwrap()];
+            self.selected_log = Some(log.clone())
+        }
+    }
+    pub fn exclude_selected_msg(&mut self){
+        let log = self.get_log_for_selection();
+        if log.is_some(){
+            let msg = &log.unwrap().msg;
+            if !self.filtered_msgs.contains(msg){
+                self.filtered_msgs.push(msg.to_string());
+                self.filter_logs();
+            }
+        }
+    }
+    fn get_log_for_selection(&mut self) -> Option<MongoLog>{
+        if self.state.selected().is_some(){
+            let log = self.view_logs.get(self.state.selected().unwrap());
+            let clone = log.unwrap().clone();
+            return Some(clone)
+        }
+        return None
     }
 }
 
@@ -136,7 +205,6 @@ fn main() -> Result<(), io::Error> {
             }
         }
     }
-    app.filter_verbose();
     app.filter_logs();
     let res = run_app(&mut terminal, app);
 
@@ -163,12 +231,17 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> io::Result<(
         if let Event::Key(key) = event::read()? {
             match key.code {
                 KeyCode::Char('q') => return Ok(()),
+                KeyCode::Char('c') => return Ok(()),
                 KeyCode::Down => app.next(),
                 KeyCode::Up => app.previous(),
-                KeyCode::Char('c') => return Ok(()),
                 KeyCode::Enter => app.enter(),
+                KeyCode::Tab => app.log_view_active=!app.log_view_active,
                 KeyCode::Char('r') => app.filter_logs(),
                 KeyCode::Char('i') => app.toggle_verbosity_informational(),
+                KeyCode::Char('w') => app.toggle_verbosity_warning(),
+                KeyCode::Char('e') => app.toggle_verbosity_error(),
+                KeyCode::Char('f') => app.toggle_verbosity_fatal(),
+                KeyCode::Char('x') => app.exclude_selected_msg(),
                 _ => {}
             }
         }
