@@ -174,6 +174,10 @@ impl App {
             }
         }
     }
+    pub fn reset_msg_filter(&mut self){
+        self.filtered_msgs = vec![];
+        self.filter_logs();
+    }
     fn get_log_for_selection(&mut self) -> Option<MongoLog>{
         if self.state.selected().is_some(){
             let log = self.view_logs.get(self.state.selected().unwrap());
@@ -236,12 +240,12 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> io::Result<(
                 KeyCode::Up => app.previous(),
                 KeyCode::Enter => app.enter(),
                 KeyCode::Tab => app.log_view_active=!app.log_view_active,
-                KeyCode::Char('r') => app.filter_logs(),
+                KeyCode::Char('r') => app.reset_msg_filter(),
                 KeyCode::Char('i') => app.toggle_verbosity_informational(),
                 KeyCode::Char('w') => app.toggle_verbosity_warning(),
                 KeyCode::Char('e') => app.toggle_verbosity_error(),
                 KeyCode::Char('f') => app.toggle_verbosity_fatal(),
-                KeyCode::Char('x') => app.exclude_selected_msg(),
+                KeyCode::Char('-') => app.exclude_selected_msg(),
                 _ => {}
             }
         }

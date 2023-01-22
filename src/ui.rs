@@ -140,6 +140,8 @@ fn ui_legend<B: Backend>(f: &mut Frame<B>, app: &mut App,rects:Vec<Rect>) {
             make_span_hint("[↑]"),Span::raw("Scroll Up"),make_span_spacer(),
             make_span_hint("[↓]"),Span::raw("Scroll Down"),make_span_spacer(),
             make_span_hint("[Tab]"),Span::raw("Switch Panes"),make_span_spacer(),
+            make_span_hint("[-]"),Span::raw("Filter out message type."),make_span_spacer(),
+            make_span_hint("[R]"),Span::raw("Reset message filters"),make_span_spacer(),
             make_span_spacer(),
             Span::raw("Verbose Level Visibility: "),
             make_span_hint("[I]"),
