@@ -47,19 +47,25 @@ fn ui_logs<B: Backend>(f: &mut Frame<B>, app:&mut App,rects:Vec<Rect>){
         else{
             Style::default().fg(Color::White)
     };
+    let loglen =app.logs.len();
+    let loglenstr = loglen.to_string();
+    let loglenstr_asbytes = loglenstr.as_bytes();
+    let len = loglenstr_asbytes.len();
+    let lenu16 = u16::try_from(len).unwrap();
+    let constraints = [
+        Constraint::Min(lenu16.to_owned()+1),
+        Constraint::Length(34),
+        Constraint::Length(15),
+        Constraint::Percentage(10),
+        Constraint::Percentage(10),
+        Constraint::Percentage(40)
+    ];
     let t = Table::new(rows)
         .header(header)
         .block(Block::default().borders(Borders::ALL).border_style(blockstyle).title("MONLOMON"))
         .highlight_style(selected_style)
         .highlight_symbol(">> ")
-        .widths(&[
-            Constraint::Percentage(10),
-            Constraint::Percentage(20),
-            Constraint::Percentage(10),
-            Constraint::Percentage(10),
-            Constraint::Percentage(10),
-            Constraint::Percentage(40)
-        ]);
+        .widths(&constraints);
     
     let main_rect = Layout::default()
     .direction(Direction::Horizontal)
@@ -134,8 +140,8 @@ fn ui_legend<B: Backend>(f: &mut Frame<B>, app: &mut App,rects:Vec<Rect>) {
             (Color::Red,Color::Rgb(228, 228, 228))
         };
     // println!("{:?}",legend_rect);
-    let legend_paragraph = Paragraph::new(vec![
-        Spans::from(vec![
+    let spans = if legend_rect[0].width>140{
+        vec![
             make_span_hint("[Q]"),Span::raw("uit"),make_span_spacer(),
             make_span_hint("[↑]"),Span::raw("Scroll Up"),make_span_spacer(),
             make_span_hint("[↓]"),Span::raw("Scroll Down"),make_span_spacer(),
@@ -155,7 +161,15 @@ fn ui_legend<B: Backend>(f: &mut Frame<B>, app: &mut App,rects:Vec<Rect>) {
             make_span_spacer(),
             make_span_hint("[F]"),
             Span::styled("atal",Style::default().bg(fatal_status.0).fg(fatal_status.1)),
-        ])
+        ]
+    }
+    else{
+        vec![
+            make_span_hint("Your terminal is too narrow, please expand it horizontally.")
+        ]
+    };
+    let legend_paragraph = Paragraph::new(vec![
+        Spans::from(spans)
     ])
     .style(Style::default().bg(Color::Reset).fg(Color::Reset))
     .alignment(Alignment::Left)
